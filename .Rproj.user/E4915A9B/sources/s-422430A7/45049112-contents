@@ -1,0 +1,212 @@
+######################################################################################################################################
+######################################################################################################################################
+######################################################################################################################################
+##  R - A NON-TECHNICAL INTRODUCTION TO BIG DATA TECHNIQUES, TEAM WORK AND INTERACTIVE VISUALIZATION WITH APPLICATIONS TO MARKETING  #
+######################################################################################################################################
+######################################################################################################################################
+######################################################################################################################################
+
+
+######################################################################################################################################
+# Exercises  - Day 1
+######################################################################################################################################
+
+
+# 01 - Select 
+#-------------------------------------------------------------------------------------------------------------------------------------
+
+setwd("C:/Users/star_/Desktop/UZH/Master/FS21/R big data techniques/Code")
+
+library(data.table)
+library(lubridate)
+
+data1 <- fread("transactions.csv")
+colnames(data1)
+
+
+
+
+
+#check column format
+str(data1)
+
+#tansform column to datetime - CHECK IT!!!
+#as.POSIXlt(data1$TransDate, format = "%d.%m.%Y")
+#as_datetime(data1$TransDate, format = "%d.%m.%Y")
+data1[, TransDate:=dmy(TransDate)]#, tz="UTC")]
+str(data1)
+
+
+library(RFMpackage)
+RFMfunction(data1)
+
+
+
+
+#select on conditions
+data1[PurchAmount > 100 & PurchAmount < 200, list(Customer,Cost)]
+
+
+
+
+
+
+# 02 - Aggregate
+#-------------------------------------------------------------------------------------------------------------------------------------
+
+colnames (data1)
+
+data1[,sum(PurchAmount), by=list(Customer, TransDate)]
+
+data1[,length(TransID),by=Customer]
+
+data1[,LeadQuantity:= shift(Quantity, type="lead"), by=list(Customer, TransID)]
+#head(data1)
+max(data1$LeadQuantity, na.rm=TRUE) #without na.rm=TRUE NA comes as an output
+
+
+
+
+# 03 - Merge
+#-------------------------------------------------------------------------------------------------------------------------------------
+
+data2 <- fread("demographics.csv")
+
+#left outer join
+merge_leftouter <- merge(data1, data2, by="Customer", all.x=TRUE)
+
+#check date column
+data2[, Birthdate:=dmy(Birthdate)]
+#str(data2)
+
+#inner join
+merge_inner <- merge(data1, data2[Birthdate>"1980-12-31",], by="Customer", all=FALSE)
+merge_inner2 <- merge(data1, data2[year(Birthdate)>1980,], by="Customer", all=FALSE) #same result
+
+
+
+
+
+# 04 - Conditions
+#-------------------------------------------------------------------------------------------------------------------------------------
+
+#data1[,list(SalesLastMonth=sum(), by=TransDate]
+
+#max transaction date
+max(data1$TransDate)
+
+#cumulated sales in that month
+#data1_sales <- data1[,list(SalesLastMonth=sum(PurchAmount)), by=floor_date(data1$TransDate, "month")] ---> doesn't work properly
+
+sales <- sum(data[TransDate>ymd("2012-11-30", tz="UTC"), PurchAmount])
+sales
+
+
+if(sales < 30000){
+  print("10% campaign")
+} else if(sales > 30000 & sales <45000){
+  print("every 3rd item free")
+}else{print("no campaign")}
+
+
+
+# 05 - Loops
+#-------------------------------------------------------------------------------------------------------------------------------------
+
+#sort the data in ascending order of the TransDate
+setkey(data1, "TransDate")
+
+spending <- 0
+i<- 0
+
+while (spending < 1000000){
+  i <- i+1
+  spending <- spending + data1[i, PurchAmount]
+}
+
+#as soon as while loop stops, the last line can be used
+print(data1[i, TransDate])
+
+
+
+
+# 06 - Functions
+#-------------------------------------------------------------------------------------------------------------------------------------
+
+div <- function(x, y){
+  result1 <- x/y
+return(result1)
+}
+
+div(10,5)
+
+dicerollfunc <- function(prob1=rep(1/6,6),prob2=rep(1/6,6)){
+  
+  dice1 <- sample(1:6, size = 1,  prob = prob1)
+  dice2 <- sample(1:6, size = 1,  prob = prob2)
+  
+  result <- sum(dice1,dice2)
+    
+return(result)
+}
+
+dicerollfunc()
+
+# Apply function using different probabilities
+#dice.roll(px=c(rep(0.1,3), rep(0.2,3)), py=c(rep(0.05,3), rep(0.3,3))) 
+
+
+
+
+# 07 - Scoring model
+#-------------------------------------------------------------------------------------------------------------------------------------
+
+library(Hmisc)
+head(data1)
+str(data1)
+maxTransDate <- max(data1$TransDate)
+
+#new rfm data table
+rfm <- copy(data1)
+rfm <- rfm[,c("Count", "LeadQuantity"):=NULL]
+
+
+str(rfm)
+head(rfm)
+
+#append recency
+
+as.numeric(d, units="days")
+
+#append recency, frequency and monetary value
+rfm_modified <- rfm[,list(Recency =as.numeric(maxTransDate - max(TransDate), units="days"), Frequency = length(TransID), Monetary_value = sum(PurchAmount)), by = Customer]
+
+str(rfm_modified)
+
+#---------------------------------------------------------------------
+
+rfm.scores <- rfm_modified[,list(Customer,
+  score_rec = as.numeric(cut2(-Recency, g=3)),
+  score_freq = as.numeric(cut2(Frequency, g=3)),
+  score_val = as.numeric(cut2(Monetary_value, g=3))
+)]
+
+#unweighted rfm score
+rfm.scores[, UnweightedRFM := mean(c(score_rec, score_freq, score_val)), by=Customer]
+
+#weighted rfm score
+rfm.scores[, WeightedRFM_206020 := mean(c(score_rec, score_freq, score_val) * c(.2,.6,.2)), by=Customer]
+rfm.scores[, WeightedRFM_602020 := mean(c(score_rec, score_freq, score_val) * c(.6,.2,.2)), by=Customer]
+
+#round unweighted rfm score
+rfm.scores[, UnweightedRFM := round(mean(c(score_rec, score_freq, score_val)),0), by=Customer]
+
+
+
+
+
+
+
+
+
+
